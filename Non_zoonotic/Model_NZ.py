@@ -1,12 +1,10 @@
 """
-Model for non-zoonotic transmission with two larval lineages.
+Model for non-zoonotic transmission with two larval lineages. This file only contains the model structure — the numerical solver is handled
+in a separate script (e.g., solve_model.py).
 
 This module provides:
 - A `Params` dataclass containing all model parameters with units documented.
 - A `model_ode` function (right-hand side of the ODE system).
-- A `simulate` helper using `scipy.integrate.solve_ivp`.
-- A `results_to_dataframe` utility that returns a tidy pandas DataFrame with
-  state trajectories, totals, and human/dog prevalences at each time point.
 
 Usage (CLI):
     $ python model.py
