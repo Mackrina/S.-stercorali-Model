@@ -78,24 +78,16 @@ def apply_mda(y, params):
 def model_wrapper(t, y, params):
     temp_params = params.copy()
 
+    # WASH intervention from WASH_START_DAY onwards
     if t >= WASH_START_DAY:
-        # Years since WASH started
-        years_since_start = (t - WASH_START_DAY) / 365.0
-
-        # Cap years_since_start at 7
-        effective_years = min(years_since_start, 9)
-
-        # Calculate capped dynamic reduction
-        base_reduction = 0.1
-        increase_per_year = 0.1
-        dynamic_reduction = base_reduction + increase_per_year * effective_years  # Max is 0.8 but capped at 0.7 below
-        dynamic_reduction = min(dynamic_reduction, 0.8)
-
-        # Apply reduction to parameters
-        temp_params['beta_C'] *= (1 - dynamic_reduction)
-        temp_params['beta_A'] *= (1 - dynamic_reduction)
-        temp_params['f_C'] *= (1 - dynamic_reduction)
-        temp_params['f_A'] *= (1 - dynamic_reduction)
+        reduction_contribution_children = params.get('intervention_reduction', 0.25)
+        reduction_contribution_adults = params.get('intervention_reduction', 0.25)
+        reduction_acquisition_children = params.get('intervention_reduction', 0)
+        reduction_acquisition_adults = params.get('intervention_reduction', 0)
+        temp_params['beta_C'] *= (1 - reduction_contribution_children)
+        temp_params['beta_A'] *= (1 - reduction_contribution_adults)
+        temp_params['f_C'] *= (1 - reduction_acquisition_children)
+        temp_params['f_A'] *= (1 - reduction_acquisition_adults)
 
     dydt = model(t, np.maximum(y, 0), temp_params)
     return np.where(y + dydt < 0, -y, dydt)
@@ -109,8 +101,8 @@ for index, row in final_results_df.iterrows():
     params['beta_DB'] = row['beta_DB']
 
     y0 = [
-        row['S_C_final'], row['E_C_final'], row['I_C_final'], 0,
-        row['S_A_final'], row['E_A_final'], row['I_A_final'], 0,
+        row['S_C_final'], row['E_C_final'], row['I_C_final'],
+        row['S_A_final'], row['E_A_final'], row['I_A_final'],
         row['S_D_final'], row['E_DB_final'], row['I_DB_final'],
         row['L_Z_final'], row['L_NZ_final']
     ]
@@ -165,13 +157,13 @@ for index, row in final_results_df.iterrows():
 
         current_t = next_t
 
-    base_path = '/media/ubuntu/f3df3264-97ef-43bf-922c-957a3c7d28f41/WASH_NZ/'
+    base_path = ''#path where want save file
     pd.DataFrame(prevalence_data).to_csv(
-        base_path + 'model_prevalence_DW_NZ_P.csv',
+        base_path + 'model_prevalence_MDA_WASH_NZ.csv',
         mode='a', header=(index == 0), index=False
     )
     pd.DataFrame(population_states_data).to_csv(
-        base_path + 'model_population_states_DW_NZ_P.csv',
+        base_path + 'model_population_states_MDA_WASH_NZ.csv',
         mode='a', header=(index == 0), index=False
     )
 
