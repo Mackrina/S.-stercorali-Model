@@ -1,26 +1,23 @@
 import numpy as np
 import pandas as pd
 from scipy.integrate import solve_ivp
-from Model import model
+from Model_NZ import model
 from Params_and_IC import IC
 from Params_and_IC import params as imported_params
 import time
 
 # Read beta values from CSV file
 start_time = time.time()
-beta_df = pd.read_csv('/media/ubuntu/f3df3264-97ef-43bf-922c-957a3c7d28f4/LHS_samples.csv')
-read_time = time.time() - start_time
-print(f"Time taken to read beta values: {read_time:.4f} seconds")
+beta_df = pd.read_csv('LHS_Samples.csv')
+
 
 # Total duration in years
-years = 200
-total_days = years * 365
+years = 200 #Time to solve
+total_days = years * 365 # Time in days
 
 # Time array for evaluation
-start_time = time.time()
 t_eval = np.linspace(0, total_days, total_days + 1)
 generate_time = time.time() - start_time
-print(f"Time taken to generate time array: {generate_time:.4f} seconds")
 
 # Model wrapper
 def model_wrapper(t, y, params):
@@ -31,9 +28,6 @@ final_derivatives = []
 
 # Tolerances
 tolerance_prevalence = 0.01
-
-# Time tracking
-start_time = time.time()
 
 for index, row in beta_df.iterrows():
     # Load and override parameters
