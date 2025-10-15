@@ -1,143 +1,156 @@
+import time
 import numpy as np
 import pandas as pd
 from scipy.integrate import solve_ivp
-from Model_NZ import model
+
+from model_NZ import model
+
+# Initial conditions + params module you already have
 from Params_and_IC import IC
 from Params_and_IC import params as imported_params
-import time
 
-# Read beta values from CSV file
-start_time = time.time()
-beta_df = pd.read_csv('LHS_Samples.csv')
+# ---- Config -----------------------------------------------------------------
 
+YEARS = 200                               # integration horizon
+TOTAL_DAYS = YEARS * 365                  # days
+T_EVAL = np.linspace(0, TOTAL_DAYS, TOTAL_DAYS + 1)  # daily output
 
-# Total duration in years
-years = 200 #Time to solve
-total_days = years * 365 # Time in days
+BETA_CSV = "LHS_Samples.csv"
+OUT_CSV  = "final_derivatives_results.csv"
+TOL_PREV = 0.01                           # 1% absolute change tolerance
 
-# Time array for evaluation
-t_eval = np.linspace(0, total_days, total_days + 1)
-generate_time = time.time() - start_time
+# ---- Helpers ----------------------------------------------------------------
 
-# Model wrapper
-def model_wrapper(t, y, params):
-    return model(y, t, params)
-
-# Prepare results list
-final_derivatives = []
-
-# Tolerances
-tolerance_prevalence = 0.01
-
-for index, row in beta_df.iterrows():
-    # Load and override parameters
-    params = imported_params.copy()
-    params['beta_C'] = row['beta_C']
-    params['beta_A'] = row['beta_A']
-    params['beta_DB'] = row['beta_DB']
-    
-    print(f"Running simulation {index + 1}: beta_C={params['beta_C']}, beta_A={params['beta_A']}, beta_DB={params['beta_DB']}")
-
-    # Initial conditions
-    y0 = [
-        IC['S_C']['args']['value'],
-        IC['E_C']['args']['value'],
-        IC['I_C']['args']['value'],
-        IC['S_A']['args']['value'],
-        IC['E_A']['args']['value'],
-        IC['I_A']['args']['value'],
-        IC['S_D']['args']['value'],
-        IC['E_DB']['args']['value'],
-        IC['I_DB']['args']['value'],
-        IC['L_Z']['args']['value'],
-        IC['L_NZ']['args']['value']
+def build_y0(IC_dict):
+    """
+    Map ICs to state order expected by model_ode:
+    [S_C, E_C, I_C, S_A, E_A, I_A, S_D, E_DB, I_DB, L_A, L_B]
+    """
+    return [
+        IC_dict['S_C']['args']['value'],
+        IC_dict['E_C']['args']['value'],
+        IC_dict['I_C']['args']['value'],
+        IC_dict['S_A']['args']['value'],
+        IC_dict['E_A']['args']['value'],
+        IC_dict['I_A']['args']['value'],
+        IC_dict['S_D']['args']['value'],
+        IC_dict['E_DB']['args']['value'],
+        IC_dict['I_DB']['args']['value'],
+        IC_dict['L_A']['args']['value'], 
+        IC_dict['L_B']['args']['value'],  
     ]
-        
-    # Solve ODE
-    start_time_solver = time.time()
-    solution = solve_ivp(
-        fun=model_wrapper,
-        t_span=(0, total_days),
-        y0=y0,
-        args=(params,),
-        method='LSODA',
-        t_eval=t_eval
+
+def run_one(params, y0, t_eval):
+    """Integrate once with LSODA; returns SciPy OdeResult."""
+    return solve_ivp(
+        fun=lambda t, y: model_ode(t, y, params),
+        t_span=(0.0, float(t_eval[-1])),
+        y0=np.asarray(y0, dtype=float),
+        method="LSODA",
+        t_eval=t_eval,
+        vectorized=False
     )
-    solve_time = time.time() - start_time_solver
 
-    if not solution.success:
-        print(f"Solver failed for beta values {row['beta_C']}, {row['beta_A']}, {row['beta_DB']}: {solution.message}")
-        continue
+# ---- Main -------------------------------------------------------------------
+
+def main():
+    start_all = time.time()
+
+    # 1) Read beta samples
+    beta_df = pd.read_csv(BETA_CSV)
+    required_cols = {"beta_C", "beta_A", "beta_DB"}
+    if not required_cols.issubset(beta_df.columns):
+        missing = sorted(required_cols - set(beta_df.columns))
+        raise ValueError(f"Missing columns in {BETA_CSV}: {missing}")
+
+    # 2) Build base y0
+    y0_base = build_y0(IC)
+
+    results = []
+    prev_year_steps = 365
+    if len(T_EVAL) < (prev_year_steps + 1):
+        raise ValueError("Time horizon must be at least 1+ years to check 1-year change.")
+
+    # 3) Sweep over beta samples
+    for idx, row in beta_df.iterrows():
+        # params is a dict (from your existing module)
+        params = imported_params.copy()
+        params["beta_C"]  = float(row["beta_C"])
+        params["beta_A"]  = float(row["beta_A"])
+        params["beta_DB"] = float(row["beta_DB"])
+
+        print(f"[{idx+1}/{len(beta_df)}] "
+              f"beta_C={params['beta_C']}, beta_A={params['beta_A']}, beta_DB={params['beta_DB']}")
+
+        t0 = time.time()
+        sol = run_one(params, y0_base, T_EVAL)
+        dt = time.time() - t0
+
+        if not sol.success:
+            print(f"  Solver failed: {sol.message}")
+            continue
+
+        # Indices
+        final_idx = -1
+        prev_idx  = - (prev_year_steps + 1)
+
+        # Prevalence in children
+        SC, EC, ICv = sol.y[0, :], sol.y[1, :], sol.y[2, :]
+        tot_children_final = SC[final_idx] + EC[final_idx] + ICv[final_idx]
+        tot_children_prev  = SC[prev_idx]  + EC[prev_idx]  + ICv[prev_idx]
+        prev_I_C_final = (ICv[final_idx] / tot_children_final) if tot_children_final > 0 else 0.0
+        prev_I_C_prev  = (ICv[prev_idx]  / tot_children_prev)  if tot_children_prev  > 0 else 0.0
+        change_C = abs(prev_I_C_final - prev_I_C_prev)
+        within_C = int(change_C <= TOL_PREV)
+
+        # Prevalence in adults
+        SA, EA, IA = sol.y[3, :], sol.y[4, :], sol.y[5, :]
+        tot_adults_final = SA[final_idx] + EA[final_idx] + IA[final_idx]
+        tot_adults_prev  = SA[prev_idx]  + EA[prev_idx]  + IA[prev_idx]
+        prev_I_A_final = (IA[final_idx] / tot_adults_final) if tot_adults_final > 0 else 0.0
+        prev_I_A_prev  = (IA[prev_idx]  / tot_adults_prev)  if tot_adults_prev  > 0 else 0.0
+        change_A = abs(prev_I_A_final - prev_I_A_prev)
+        within_A = int(change_A <= TOL_PREV)
+
+        # Prevalence in dogs (lineage B)
+        SD, EDB, IDB = sol.y[6, :], sol.y[7, :], sol.y[8, :]
+        tot_dogs_final = SD[final_idx] + EDB[final_idx] + IDB[final_idx]
+        tot_dogs_prev  = SD[prev_idx]  + EDB[prev_idx]  + IDB[prev_idx]
+        prev_I_DB_final = (IDB[final_idx] / tot_dogs_final) if tot_dogs_final > 0 else 0.0
+        prev_I_DB_prev  = (IDB[prev_idx]  / tot_dogs_prev)  if tot_dogs_prev  > 0 else 0.0
+        change_DB = abs(prev_I_DB_final - prev_I_DB_prev)
+        within_DB = int(change_DB <= TOL_PREV)
+
+        # Larvae equilibrium (A & B)
+        L_A_final, L_A_prev = sol.y[9, final_idx],  sol.y[9, prev_idx]
+        L_B_final, L_B_prev = sol.y[10, final_idx], sol.y[10, prev_idx]
+        within_LA = int(L_A_final != 0 and abs(L_A_final - L_A_prev) <= TOL_PREV * abs(L_A_final))
+        within_LB = int(L_B_final != 0 and abs(L_B_final - L_B_prev) <= TOL_PREV * abs(L_B_final))
+
+        results.append({
+            "Particle": idx + 1,
+            "beta_C": params["beta_C"],
+            "beta_A": params["beta_A"],
+            "beta_DB": params["beta_DB"],
+            "prevalence_C_within_1pct": within_C,
+            "prevalence_A_within_1pct": within_A,
+            "prevalence_DB_within_1pct": within_DB,
+            "L_A_within_1pct": within_LA,
+            "L_B_within_1pct": within_LB,
+            "final_prevalence_I_C": prev_I_C_final,
+            "final_prevalence_I_A": prev_I_A_final,
+            "final_prevalence_I_DB": prev_I_DB_final,
+            "L_A_final": L_A_final,
+            "L_B_final": L_B_final,
+            "solve_seconds": dt,
+        })
+
+    # 4) Save
+    out_df = pd.DataFrame(results)
+    out_df.to_csv(OUT_CSV, index=False)
+    print(f"Saved results → {OUT_CSV}")
+    print(f"Total wall time: {time.time() - start_all:.2f}s")
 
 
-    # Time indices for final and one year before
-    final_index = -1
-    prev_year_index = -366  # 365 days before final
-
-    # Prevalence in Children
-    total_children_final = sum(solution.y[i, final_index] for i in [0, 1, 2])
-    prevalence_I_C_final = solution.y[2, final_index] / total_children_final if total_children_final != 0 else 0
-
-    total_children_prev = sum(solution.y[i, prev_year_index] for i in [0, 1, 2])
-    prevalence_I_C_prev = solution.y[2, prev_year_index] / total_children_prev if total_children_prev != 0 else 0
-
-    change_C = abs(prevalence_I_C_final - prevalence_I_C_prev)
-    prevalence_C_within_tol = change_C <= tolerance_prevalence
-
-    # Prevalence in Adults
-    total_adults_final = sum(solution.y[i, final_index] for i in [3, 4, 5])
-    prevalence_I_A_final = solution.y[5, final_index] / total_adults_final if total_adults_final != 0 else 0
-
-    total_adults_prev = sum(solution.y[i, prev_year_index] for i in [3, 4, 5])
-    prevalence_I_A_prev = solution.y[5, prev_year_index] / total_adults_prev if total_adults_prev != 0 else 0
-
-    change_A = abs(prevalence_I_A_final - prevalence_I_A_prev)
-    prevalence_A_within_tol = change_A <= tolerance_prevalence
-
-    # Prevalence in Dogs
-    total_dogs_final = sum(solution.y[i, final_index] for i in [6, 7, 8])
-    prevalence_I_DB_final = solution.y[8, final_index] / total_dogs_final if total_dogs_final != 0 else 0
-
-    total_dogs_prev = sum(solution.y[i, prev_year_index] for i in [6, 7, 8])
-    prevalence_I_DB_prev = solution.y[8, prev_year_index] / total_dogs_prev if total_dogs_prev != 0 else 0
-
-    change_DB = abs(prevalence_I_DB_final - prevalence_I_DB_prev)
-    prevalence_DB_within_tol = change_DB <= tolerance_prevalence
-
-    # Larvae equilibrium check (1% change over 1 year)
-    LZ_final = solution.y[9, final_index]
-    LZ_prev = solution.y[9, prev_year_index]
-    LZ_change_within_tol = abs(LZ_final - LZ_prev) <= tolerance_prevalence * LZ_final if LZ_final != 0 else False
-
-    LNZ_final = solution.y[10, final_index]
-    LNZ_prev = solution.y[10, prev_year_index]
-    LNZ_change_within_tol = abs(LNZ_final - LNZ_prev) <= tolerance_prevalence * LNZ_final if LNZ_final != 0 else False
-
-    # Store results
-    final_derivatives.append({
-        'Particle': index + 1,
-        'beta_C': row['beta_C'],
-        'beta_A': row['beta_A'],
-        'beta_DB': row['beta_DB'],
-        'prevalence_C_within_1pct': int(prevalence_C_within_tol),
-        'prevalence_A_within_1pct': int(prevalence_A_within_tol),
-        'prevalence_DB_within_1pct': int(prevalence_DB_within_tol),
-        'LZ_within_1pct': int(LZ_change_within_tol),
-        'LNZ_within_1pct': int(LNZ_change_within_tol),
-        'final_prevalence_I_C': prevalence_I_C_final,
-        'final_prevalence_I_A': prevalence_I_A_final,
-        'final_prevalence_I_DB': prevalence_I_DB_final,
-        'L_Z_final': LZ_final,
-        'L_NZ_final': LNZ_final 
-        
-    })
-
-# Save output
-results_df = pd.DataFrame(final_derivatives)
-output_file_path = '/media/ubuntu/f3df3264-97ef-43bf-922c-957a3c7d28f4/final_derivatives_results_NZ.csv'
-results_df.to_csv(output_file_path, index=False)
-print(f"Results saved to {output_file_path}")
-
-# Total time
-total_time = time.time() - start_time
-print(f"Total time taken for the entire process: {total_time:.4f} seconds")
+if __name__ == "__main__":
+    main()
