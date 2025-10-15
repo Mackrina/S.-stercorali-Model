@@ -29,8 +29,7 @@ T_DAILY = np.arange(0, TOTAL_DAYS, 1, dtype=int)
 # --------------------------
 # Interventions
 # --------------------------
-# MDA: semiannual for 2.5 years → 5 pulses at 1y, 2y, 3y, 4y, 5y? (your code showed 1..5 * 365)
-# If you truly want "semiannual for 2.5 years", you likely want 5 pulses at 0.5y, 1.0y, 1.5y, 2.0y, 2.5y.
+
 # Below keeps your original 1y,2y,3y,4y,5y pulses:
 MDA_PULSES_DAYS = [365 * i for i in range(1, 6)]
 
