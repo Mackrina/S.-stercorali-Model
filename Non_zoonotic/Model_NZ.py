@@ -1,6 +1,6 @@
 """
 Model for non-zoonotic transmission with two larval lineages. This file only contains the model structure — the numerical solver is handled
-in a separate script (e.g., solve_model.py).
+in a separate script solve.py.
 
 This module provides:
 - A `Params` dataclass containing all model parameters with units documented.
@@ -182,7 +182,7 @@ def model_ode(
     infectious_Adult = p.alpha_H * E_A
     infectious_Dogs_DB = p.alpha_D * E_DB
 
-    # Larval output into environment
+    # Larval output into the environment
     human_larvae_output_C = p.n_C * p.f_C * I_C
     human_larvae_output_A = p.n_A * p.f_A * I_A
     dog_larvae_output_DB = p.n_D * p.f_D * I_DB
@@ -207,117 +207,3 @@ def model_ode(
 
     return np.array([dS_C, dE_C, dI_C, dS_A, dE_A, dI_A, dS_D, dE_DB, dI_DB, dL_A, dL_B], dtype=float)
 
-
-# --------------------------------------------------------------------------------------
-# Simulation helpers
-# --------------------------------------------------------------------------------------
-
-def simulate(
-    y0: Iterable[float],
-    t_span: Tuple[float, float],
-    params: Params,
-    t_eval: Optional[np.ndarray] = None,
-    rtol: float = 1e-6,
-    atol: float = 1e-9,
-    method: str = "RK45",
-) -> solve_ivp:
-    """
-    Integrate the ODE system.
-
-    Args:
-        y0: Initial conditions, iterable of length 11.
-        t_span: (t0, tf) in days.
-        params: Params dataclass.
-        t_eval: Optional array of time points (days) at which to store the solution.
-        rtol, atol: Solver tolerances.
-        method: Any method accepted by `solve_ivp` (e.g., "RK45", "BDF").
-
-    Returns:
-        SciPy `OdeResult` as returned by `solve_ivp`.
-    """
-    y0 = np.asarray(list(y0), dtype=float)
-    assert y0.shape == (11,), "y0 must have 11 elements."
-
-    # Wrap RHS with params closed over
-    def rhs(t, y):
-        return model_ode(t, y, params)
-
-    sol = solve_ivp(
-        rhs,
-        t_span=t_span,
-        y0=y0,
-        t_eval=t_eval,
-        method=method,
-        rtol=rtol,
-        atol=atol,
-        vectorized=False,
-    )
-    return sol
-
-
-def results_to_dataframe(
-    sol: solve_ivp,
-    particle: int = 1,
-    beta_C: Optional[float] = None,
-    beta_A: Optional[float] = None,
-    beta_DB: Optional[float] = None,
-) -> pd.DataFrame:
-    """
-    Convert a SciPy OdeResult into a tidy DataFrame with totals and prevalences.
-
-    Columns produced:
-        Time_day, Particle, beta_C, beta_A, beta_DB,
-        S_C, E_C, I_C, S_A, E_A, I_A, S_D, E_DB, I_DB, L_A, L_B,
-        Total_Children, Total_Adults, Total_Humans, Total_Dogs,
-        prevalence_I_C, prevalence_I_A, prevalence_I_H, prevalence_I_DA
-
-    Args:
-        sol: SciPy OdeResult with `t` and `y`.
-        particle: An identifier for parameter/particle index (for stacking runs).
-        beta_C, beta_A, beta_DB: Optional copies of beta values to store per row.
-
-    Returns:
-        pd.DataFrame
-    """
-    if sol.t is None or sol.y is None:
-        raise ValueError("Invalid OdeResult: missing solution arrays.")
-
-    t = sol.t
-    Y = sol.y  # shape (11, len(t))
-
-    df = pd.DataFrame(
-        {
-            "Time_day": t,
-            "S_C": Y[0],
-            "E_C": Y[1],
-            "I_C": Y[2],
-            "S_A": Y[3],
-            "E_A": Y[4],
-            "I_A": Y[5],
-            "S_D": Y[6],
-            "E_DB": Y[7],
-            "I_DB": Y[8],
-            "L_A": Y[9],
-            "L_B": Y[10],
-        }
-    )
-
-    # Totals
-    df["Total_Children"] = df["S_C"] + df["E_C"] + df["I_C"]
-    df["Total_Adults"] = df["S_A"] + df["E_A"] + df["I_A"]
-    df["Total_Humans"] = df["Total_Children"] + df["Total_Adults"]
-    df["Total_Dogs"] = df["S_D"] + df["E_DB"] + df["I_DB"]
-
-    # Prevalences (guard against zero totals)
-    df["prevalence_I_C"] = np.where(df["Total_Children"] > 0, df["I_C"] / df["Total_Children"], 0.0)
-    df["prevalence_I_A"] = np.where(df["Total_Adults"] > 0, df["I_A"] / df["Total_Adults"], 0.0)
-    df["prevalence_I_H"] = np.where(df["Total_Humans"] > 0, (df["I_C"] + df["I_A"]) / df["Total_Humans"], 0.0)
-    df["prevalence_I_DA"] = np.where(df["Total_Dogs"] > 0, df["I_DB"] / df["Total_Dogs"], 0.0)
-
-    # Metadata / identifiers
-    df["Particle"] = int(particle)
-    df["beta_C"] = beta_C
-    df["beta_A"] = beta_A
-    df["beta_DB"] = beta_DB
-
-    return df
