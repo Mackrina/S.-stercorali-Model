@@ -113,7 +113,7 @@ def model_ode(
     """
     Right-hand side of the ODE system dy/dt = f(t, y; p).
 
-    State vector y (length 11):
+    State vector y (length 10):
         0  S_C   Susceptible Children
         1  E_C   Exposed Children
         2  I_C   Infectious Children
@@ -126,12 +126,12 @@ def model_ode(
         9  L_A   Environmental larvae (Lineage A)
         
     Coupling (corrected and consistent):
-        lambda_C  = beta_C  * L_A / (K + L_A)  # children FOI
-        lambda_A = beta_A  * L_A / (K + L_A)  # adults FOI
-        lambda_DA = beta_DA * L_A / (K + L_A)  # dogs FOI
+        lambda_C  = beta_C  * L_A / (K + L_A)   # children FOI
+        lambda_A  = beta_A  * L_A / (K + L_A)   # adults FOI
+        lambda_DA = beta_DA * L_A / (K + L_A)   # dogs FOI
 
     Returns:
-        dydt: np.ndarray of shape (11,)
+        dydt: np.ndarray of shape (10,)
     """
     # Unpack state
     S_C, E_C, I_C, S_A, E_A, I_A, S_D, E_DA, I_DA, L_A = y
@@ -165,16 +165,16 @@ def model_ode(
     # Environmental larval mortality
     larvae_deaths_env_A = p.mu_L * L_A
     
-
-    # Forces of infection (saturating larval pressure)
-    lambda_C = p.beta_C * L_A / (p.K + L_A) if (p.K + L_A) 
-    lambda_A = p.beta_A * L_A / (p.K + L_A) if (p.K + L_A) 
-    lambda_DA = p.beta_DB * L_A / (p.K + L_A) if (p.K + L_A)
+    # Forces of infection (saturating larval pressure; safe denominator)
+    denom = p.K + L_A
+    lambda_C  = p.beta_C  * L_A / denom if denom > 0 else 0.0
+    lambda_A  = p.beta_A  * L_A / denom if denom > 0 else 0.0
+    lambda_DA = p.beta_DA * L_A / denom if denom > 0 else 0.0
 
     # New infections
     Children_infections = lambda_C * S_C
-    Adult_infections = lambda_AH * S_A
-    dog_infections_DB = lambda_DA * S_D
+    Adult_infections = lambda_A * S_A
+    dog_infections_DA = lambda_DA * S_D
 
     # Progression exposed -> infectious
     infectious_Children = p.alpha_H * E_C
@@ -196,7 +196,7 @@ def model_ode(
     dI_A = infectious_Adult + Ageing_I - human_deaths_I_A
 
     # ODEs: dogs
-    dS_D = dog_births - dog_deaths_S_D - dog_infections_DB
+    dS_D = dog_births - dog_deaths_S_D - dog_infections_DA
     dE_DA = dog_infections_DA - dog_deaths_E_DA - infectious_Dogs_DA
     dI_DA = infectious_Dogs_DA - dog_deaths_I_DA
 
