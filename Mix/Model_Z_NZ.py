@@ -175,10 +175,10 @@ def model_ode(
     larvae_deaths_env_B = p.mu_L * L_B
 
     # Forces of infection (saturating larval pressure)
-    lambda_C = p.beta_C * L_A / (p.K + L_A) if (p.K + L_A) 
-    lambda_A = p.beta_A * L_A / (p.K + L_A) if (p.K + L_A) 
-    lambda_DA = p.beta_DA * L_A / (p.K + L_A) if (p.K + L_A)
-    lambda_DB = p.beta_DB * L_B / (p.K + L_B) if (p.K + L_B)
+    lambda_C = p.beta_C * L_A / (p.K + L_A) 
+    lambda_A = p.beta_A * L_A / (p.K + L_A) 
+    lambda_DA = p.beta_DA * L_A / (p.K + L_A) 
+    lambda_DB = p.beta_DB * L_B / (p.K + L_B) 
 
     # New infections
     Children_infections = lambda_C * S_C
@@ -209,8 +209,8 @@ def model_ode(
 
     # ODEs: dogs
     dS_D = dog_births - dog_deaths_S_D - dog_infections_DB
-    dE_DB = dog_infections_DA - dog_deaths_E_DA - infectious_Dogs_DA
-    dI_DB = infectious_Dogs_DA - dog_deaths_I_DA
+    dE_DA = dog_infections_DA - dog_deaths_E_DA - infectious_Dogs_DA
+    dI_DA = infectious_Dogs_DA - dog_deaths_I_DA
     dE_DB = dog_infections_DB - dog_deaths_E_DB - infectious_Dogs_DB
     dI_DB = infectious_Dogs_DB - dog_deaths_I_DB
 
