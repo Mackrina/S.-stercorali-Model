@@ -1,20 +1,21 @@
 # solve_MDA_WASH.py
 # Run MDA pulses + WASH intervention using legacy Model_NZ (11-state system)
-# State order: [S_C, E_C, I_C, S_A, E_A, I_A, S_D, E_DB, I_DB, L_Z, L_NZ]
+# State order: [S_C, E_C, I_C, S_A, E_A, I_A, S_D, E_DB, I_DB, L_A, L_B]
 
 import time
 import numpy as np
 import pandas as pd
+from types import SimpleNamespace
 from scipy.integrate import solve_ivp
 
-from Model_NZ import model                   # legacy signature: model(y, t, params)
-from Params_and_IC_MDA import params as base_params
-from Params_and_IC_MDA import IC
+from Model_NZ import model_ode                  
+from Params_and_IC import params as base_params
+from Params_and_IC import IC
 
 # --------------------------
 # File I/O
 # --------------------------
-EQUIL_CSV = 'final_derivative_NZ'
+EQUIL_CSV = 'final_derivatives_results.csv'
 OUT_PREV_CSV = 'model_prevalence_MDA_WASH_NZ.csv'
 OUT_STATE_CSV = 'model_population_states_MDA_WASH_NZ.csv'
 
@@ -24,7 +25,7 @@ OUT_STATE_CSV = 'model_population_states_MDA_WASH_NZ.csv'
 YEARS = 50
 TOTAL_DAYS = YEARS * 365
 # daily RHS evaluations (solver still adapts but returns these points)
-T_DAILY = np.arange(0, TOTAL_DAYS, 1, dtype=int)
+T_DAILY = np.arange(0, TOTAL_DAYS + 1, 1, dtype=int)  # inclusive of TOTAL_DAYS
 
 # --------------------------
 # Interventions
@@ -52,7 +53,7 @@ IDX = {
     'S_C': 0, 'E_C': 1, 'I_C': 2,
     'S_A': 3, 'E_A': 4, 'I_A': 5,
     'S_D': 6, 'E_DB': 7, 'I_DB': 8,
-    'L_Z': 9, 'L_NZ': 10,
+    'L_A': 9, 'L_B': 10,
 }
 
 # ==========================
@@ -103,7 +104,7 @@ def apply_mda_pulse(y, params):
 # ==========================
 def rhs_with_wash(t, y, params):
     """
-    Legacy Model_NZ expects signature model(y, t, params).
+    Model_NZ.model_ode signature: model_ode(t, y, params).
     WASH: after WASH_START_DAY, reduce beta_C/A and/or f_C/A according to params or DEFAULT_WASH.
     """
     y = np.maximum(y, 0.0)
@@ -121,8 +122,10 @@ def rhs_with_wash(t, y, params):
         tmp['f_C']    *= (1.0 - wash_f_red_C)
         tmp['f_A']    *= (1.0 - wash_f_red_A)
 
-    dydt = model(y, t, tmp)  # <-- correct legacy call order
-    # Non-negativity projection: if any y + dt falls below 0, reflect derivative to keep within bounds
+    # If model_ode expects attribute access (p.beta_C), provide a namespace
+    p = SimpleNamespace(**tmp)
+    dydt = model_ode(t, y, p)  
+    # Non-negativity projection (simple guard)
     return np.where(y + dydt < 0.0, -y, dydt)
 
 # ==========================
@@ -149,7 +152,7 @@ def main():
             row['S_C_final'], row['E_C_final'], row['I_C_final'],
             row['S_A_final'], row['E_A_final'], row['I_A_final'],
             row['S_D_final'], row['E_DB_final'], row['I_DB_final'],
-            row['L_Z_final'], row['L_NZ_final']
+            row['L_A_final'], row['L_B_final']
         ], dtype=float)
 
         print(f"Running Particle {idx+1}/{len(eq)}: "
@@ -166,11 +169,9 @@ def main():
         segment_ends = list(MDA_PULSES_DAYS) + [TOTAL_DAYS]
 
         for seg_end in segment_ends:
-            # time grid for this segment (daily)
-            t_eval_seg = np.arange(current_t, seg_end, 1, dtype=int)
+            # time grid for this segment (daily) — include seg_end so pulse uses state at the pulse time
+            t_eval_seg = np.arange(current_t, seg_end + 1, 1, dtype=int)
             if t_eval_seg.size == 0:
-                # If two pulses share the same day as current_t, skip
-                # but still apply the pulse below
                 pass
             else:
                 sol = solve_ivp(
@@ -185,7 +186,6 @@ def main():
 
                 if not sol.success:
                     print(f"  Solver failed: {sol.message}")
-                    # best-effort: continue to next particle
                     break
 
                 # Record every ~30 days
@@ -220,7 +220,7 @@ def main():
                         'S_C': state[IDX['S_C']], 'E_C': state[IDX['E_C']], 'I_C': state[IDX['I_C']],
                         'S_A': state[IDX['S_A']], 'E_A': state[IDX['E_A']], 'I_A': state[IDX['I_A']],
                         'S_D': state[IDX['S_D']], 'E_DB': state[IDX['E_DB']], 'I_DB': state[IDX['I_DB']],
-                        'L_Z': state[IDX['L_Z']], 'L_NZ': state[IDX['L_NZ']],
+                        'L_A': state[IDX['L_A']], 'L_B': state[IDX['L_B']],
                     })
 
                 # advance current state to segment end
