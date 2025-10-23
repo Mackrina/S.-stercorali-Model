@@ -202,7 +202,7 @@ def main():
 
                     # Prevalences
                     prev_I_H  = ((state[IDX['I_C']] + state[IDX['I_A']]) / tot_humans) if tot_humans > 0 else 0.0
-                    prev_I_DB = (state[IDX['I_DA']] / tot_dogs) if tot_dogs > 0 else 0.0
+                    prev_I_DA = (state[IDX['I_DA']] / tot_dogs) if tot_dogs > 0 else 0.0
 
                     prevalence_rows.append({
                         'Time_day': float(sol.t[j]),
