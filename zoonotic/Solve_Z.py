@@ -4,7 +4,7 @@ import pandas as pd
 from types import SimpleNamespace
 from scipy.integrate import solve_ivp
 
-from Model_NZ import model_ode
+from Model_Z import model_ode
 from Params_and_IC import IC
 from Params_and_IC import params as imported_params
 
