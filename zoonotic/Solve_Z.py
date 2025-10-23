@@ -141,7 +141,7 @@ def main():
             "S_D_final": final_state[6],
             "E_DA_final": final_state[7],
             "I_DA_final": final_state[8],
-            "L_A_final_state": final_state[9],
+            "L_A_final": final_state[9],
            
         })
 
