@@ -8,7 +8,7 @@ import pandas as pd
 from types import SimpleNamespace
 from scipy.integrate import solve_ivp
 
-from Model_NZ import model_ode                  
+from Model_NZ import model_ode                  # signature: model_ode(t, y, params)
 from Params_and_IC import params as base_params
 from Params_and_IC import IC
 
@@ -124,7 +124,7 @@ def rhs_with_wash(t, y, params):
 
     # If model_ode expects attribute access (p.beta_C), provide a namespace
     p = SimpleNamespace(**tmp)
-    dydt = model_ode(t, y, p)  
+    dydt = model_ode(t, y, p)  # <-- correct order (t, y, params)
     # Non-negativity projection (simple guard)
     return np.where(y + dydt < 0.0, -y, dydt)
 
