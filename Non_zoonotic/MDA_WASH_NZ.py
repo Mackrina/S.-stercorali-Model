@@ -14,7 +14,7 @@ from Params_and_IC_MDA import IC
 # --------------------------
 # File I/O
 # --------------------------
-EQUIL_CSV = '/media/ubuntu/f3df3264-97ef-43bf-922c-957a3c7d28f41/NZ/final_derivative_200_years_NZ_95.csv'
+EQUIL_CSV = 'final_derivative_NZ'
 OUT_PREV_CSV = 'model_prevalence_MDA_WASH_NZ.csv'
 OUT_STATE_CSV = 'model_population_states_MDA_WASH_NZ.csv'
 
