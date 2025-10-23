@@ -18,11 +18,11 @@ filtered_df = df[
     (df['final_prevalence_I_A'] >= 1.7 * df['final_prevalence_I_C']) &
     (df['final_prevalence_I_A'] <= 2.5 * df['final_prevalence_I_C']) &
     (df['final_prevalence_I_D'] >= prevalence_I_D_range[0]) & 
-    (df['final_prevalence_I_D'] <= prevalence_I_D_range[1]) 
+    (df['final_prevalence_I_D'] <= prevalence_I_D_range[1]) &
     (df['final_prevalence_I_DA'] >= prevalence_I_DA_20_range[0]) &
     (df['final_prevalence_I_DA'] <= prevalence_I_DA_20_range[1]) &
     (df['final_prevalence_I_DB'] >= prevalence_I_DB_20_range[0]) &
-    (df['final_prevalence_I_DB'] <= prevalence_I_DB_20_range[1])&
+    (df['final_prevalence_I_DB'] <= prevalence_I_DB_20_range[1])
     
     
 ]
@@ -40,7 +40,7 @@ print('num_rows', len(filtered_df))
 
 
 # Save the filtered DataFrame to a new CSV file
-filtered_df.to_csv('/media/ubuntu/f3df3264-97ef-43bf-922c-957a3c7d28f41/Filetred.csv', index=False)
+filtered_df.to_csv('Filetred_20.csv', index=False)
 
 
 print('results saved to filtered_data.csv')
