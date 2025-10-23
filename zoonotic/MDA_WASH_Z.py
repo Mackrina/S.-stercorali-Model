@@ -15,9 +15,9 @@ from Params_and_IC import IC
 # --------------------------
 # File I/O
 # --------------------------
-EQUIL_CSV = 'final_derivatives_results.csv'
-OUT_PREV_CSV = 'model_prevalence_MDA_WASH_NZ.csv'
-OUT_STATE_CSV = 'model_population_states_MDA_WASH_NZ.csv'
+EQUIL_CSV = 'Filtered_Z.csv'
+OUT_PREV_CSV = 'model_prevalence_MDA_WASH_Z.csv'
+OUT_STATE_CSV = 'model_population_states_MDA_WASH_Z.csv'
 
 # --------------------------
 # Simulation window
@@ -124,7 +124,7 @@ def rhs_with_wash(t, y, params):
 
     # If model_ode expects attribute access (p.beta_C), provide a namespace
     p = SimpleNamespace(**tmp)
-    dydt = model_ode(t, y, p)  # <-- correct order (t, y, params)
+    dydt = model_ode(t, y, p)  
     # Non-negativity projection (simple guard)
     return np.where(y + dydt < 0.0, -y, dydt)
 
