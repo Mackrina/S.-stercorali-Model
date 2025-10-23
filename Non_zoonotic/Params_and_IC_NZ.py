@@ -37,6 +37,9 @@ params = {
 
     # Environment
     'mu_L': 1 / 7,              # larvae mortality in environment
+
+    'c_H' : 1, # effective coverage of mass drug administration in children
+    'c_D' : 1, # effective coverage of mass drug administration in dogs
 }
 
 # ---------------------------
