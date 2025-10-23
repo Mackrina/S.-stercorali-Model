@@ -15,7 +15,7 @@ from Params_and_IC import IC
 # --------------------------
 # File I/O
 # --------------------------
-EQUIL_CSV = 'final_derivatives_results.csv'
+EQUIL_CSV = 'filtered_data_NZ.csv'
 OUT_PREV_CSV = 'model_prevalence_MDA_WASH_NZ.csv'
 OUT_STATE_CSV = 'model_population_states_MDA_WASH_NZ.csv'
 
