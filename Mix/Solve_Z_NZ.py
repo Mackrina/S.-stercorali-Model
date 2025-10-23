@@ -4,9 +4,9 @@ import pandas as pd
 from types import SimpleNamespace
 from scipy.integrate import solve_ivp
 
-from Model_Z_NZ import model_ode
-from Params_and_IC_mix import IC
-from Params_and_IC_mix import params as imported_params
+from Model_NZ import model_ode
+from Params_and_IC import IC
+from Params_and_IC import params as imported_params
 
 # ---- Config -----------------------------------------------------------------
 YEARS = 200
